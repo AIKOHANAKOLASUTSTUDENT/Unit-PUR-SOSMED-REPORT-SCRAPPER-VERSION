@@ -1,15 +1,13 @@
 import re
+import time
 from datetime import datetime, timedelta
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
+import requests
 from bs4 import BeautifulSoup
-from playwright.sync_api import Playwright, sync_playwright, TimeoutError as PlaywrightTimeoutError
 
 from config.settings import (
-    DEFAULT_USER_AGENT,
     FIXED_REGIONS,
-    PLAYWRIGHT_ARGS,
-    PLAYWRIGHT_HEADLESS,
     PROVINCE_CODE,
     TARGET_URL,
 )
@@ -17,119 +15,285 @@ from transformer.processor import build_record
 from transformer.normalizer import parse_tanggal_pengambilan
 from utils.logger import get_logger
 
+# Direct URL patterns discovered from browser inspection of the DJPK portal.
+# The form submits via GET with query parameters — no session/CSRF required.
+DATA_URL = TARGET_URL  # https://djpk.kemenkeu.go.id/portal/data/apbd
+
+_DEFAULT_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8",
+    "Referer": TARGET_URL,
+}
+
 
 class APBDScraper:
     def __init__(self) -> None:
         self.logger = get_logger()
-        self.periode, self.tahun = self._compute_reporting_period()
-        self.nama_file = f"{self.tahun}_{self.periode:02d}.csv"
+        self.session = requests.Session()
+        self.session.headers.update(_DEFAULT_HEADERS)
 
-    def _compute_reporting_period(self) -> (int, int):
+    @staticmethod
+    def _compute_reporting_period() -> Tuple[int, int]:
         now = datetime.now()
         if now.day == 1:
             previous = now - timedelta(days=1)
             return previous.month, previous.year
         return now.month, now.year
 
-    def _set_select_value(self, page: Any, selector: str, value: str) -> None:
-        page.wait_for_selector(selector, timeout=60000)
-        try:
-            page.select_option(selector, value)
-            page.evaluate(
-                "({ selector, value }) => { const element = document.querySelector(selector); if (!element) return; if (window.$) { $(selector).val(value).trigger('change'); } else { element.dispatchEvent(new Event('change', { bubbles: true })); } }",
-                {"selector": selector, "value": value},
-            )
-            page.wait_for_timeout(500)
-            return
-        except Exception as err:
-            self.logger.warning("select_option failed for %s=%s, falling back to JS event dispatch: %s", selector, value, err)
+    @staticmethod
+    def _normalize_period(year: int, month: int) -> Tuple[int, int]:
+        if month < 1 or month > 12:
+            raise ValueError("Month must be between 1 and 12")
+        return year, month
 
-        page.evaluate(
-            "({ selector, value }) => { const element = document.querySelector(selector); if (!element) return; if (window.$) { $(selector).val(value).trigger('change'); } else { element.value = value; element.dispatchEvent(new Event('change', { bubbles: true })); } }",
-            {"selector": selector, "value": value},
-        )
-        page.wait_for_timeout(500)
+    @classmethod
+    def _iterate_periods(
+        cls,
+        start_year: int,
+        start_month: int,
+        end_year: int | None = None,
+        end_month: int | None = None,
+    ) -> List[Tuple[int, int]]:
+        start_year, start_month = cls._normalize_period(start_year, start_month)
+        if end_year is None or end_month is None:
+            now = datetime.now()
+            end_year, end_month = now.year, now.month
+        end_year, end_month = cls._normalize_period(end_year, end_month)
 
-    def _wait_for_pemda_options(self, page: Any) -> None:
-        page.wait_for_function(
-            "() => { const select = document.querySelector('#sel_pemda'); return select && select.querySelectorAll('option').length > 1; }",
-            timeout=45000,
-        )
+        if (start_year, start_month) > (end_year, end_month):
+            raise ValueError("Start period must be earlier than or equal to end period")
 
-    def _submit_query(self, page: Any) -> None:
-        button = page.query_selector('button[type="submit"]')
-        if not button:
-            raise RuntimeError("Submit button was not found on the page")
-        button.click()
-        page.wait_for_selector('table.table.tab-primary.table-striped', timeout=30000)
-        page.wait_for_timeout(500)
+        periods: List[Tuple[int, int]] = []
+        current_year, current_month = start_year, start_month
+        while (current_year, current_month) <= (end_year, end_month):
+            periods.append((current_year, current_month))
+            if current_month == 12:
+                current_year += 1
+                current_month = 1
+            else:
+                current_month += 1
 
-    def _extract_first_summary_row(self, html: str) -> List[str]:
+        return periods
+
+    @staticmethod
+    def get_nama_file(year: int, month: int) -> str:
+        return f"{year}_{month:02d}csv"
+
+    def _fetch_region_html(self, region_value: str, year: int, month: int) -> str:
+        """Fetch APBD page for a specific region via direct GET request."""
+        params = {
+            "periode": str(month),
+            "tahun": str(year),
+            "provinsi": PROVINCE_CODE,
+            "pemda": region_value,
+        }
+        self.logger.debug("Fetching URL params: %s", params)
+        resp = self.session.get(DATA_URL, params=params, timeout=30)
+        resp.raise_for_status()
+        return resp.text
+
+    def _extract_summary_rows(self, html: str) -> List[List[str]]:
         soup = BeautifulSoup(html, "html.parser")
         table = soup.select_one("table.table.tab-primary.table-striped")
         if not table:
-            raise ValueError("APBD summary table not found")
+            raise ValueError("APBD summary table not found in HTML response")
 
-        rows = [
-            [cell.text.strip() for cell in row.select("td")]
-            for row in table.select("tbody tr")
-            if row.get_text(strip=True)
-        ]
-        if not rows or len(rows[0]) < 5:
-            raise ValueError("Could not extract the expected row content from APBD table")
-        return rows[0]
+        # The DJPK portal generates invalid HTML with nested <tr> inside <tr>.
+        # BeautifulSoup (and most parsers) flatten this into one huge row.
+        # Solution: extract each <tr>...</tr> block directly from the raw table HTML
+        # using regex, then parse each block individually for exactly 5 cells.
+        raw_table_html = str(table)
 
-    def _extract_tanggal_pengambilan(self, html: str) -> str:
+        # Extract individual <tr> opening tags with their content up to the next <tr
+        # Split by <tr (case-insensitive) boundaries
+        tr_blocks = re.split(r'(?i)<tr(?:\s[^>]*)?>', raw_table_html)
+
+        rows = []
+        for block in tr_blocks:
+            # Parse just this block to get <td> elements
+            block_soup = BeautifulSoup("<table><tr>" + block + "</tr></table>", "html.parser")
+            cells = block_soup.select("td")
+            if len(cells) < 5:
+                continue
+            cell_texts = [c.get_text(strip=True) for c in cells[:5]]
+            # Skip rows where no meaningful data exists
+            if all(not v for v in cell_texts):
+                continue
+            # Skip rows where akun (index 1) is empty
+            if not cell_texts[1]:
+                continue
+            rows.append(cell_texts)
+
+        if not rows:
+            raise ValueError("Could not extract summary rows from APBD table")
+        return rows
+
+    def _extract_tanggal_pengambilan(self, html: str, year: int, month: int) -> tuple[str, bool]:
         soup = BeautifulSoup(html, "html.parser")
-        paragraphs = " ".join(p.get_text(separator=" ").strip() for p in soup.select("p"))
-        match = re.search(r"data diterima SIKD per\s+(\d{1,2}\s+[A-Za-z]+\s+\d{4})", paragraphs, flags=re.IGNORECASE)
-        if match:
-            return parse_tanggal_pengambilan(match.group(1))
-        return datetime.now().strftime("%Y-%m-%d")
+        page_text = soup.get_text(separator=" ").strip()
 
-    def _build_region_record(self, raw_row: List[str], region_name: str, tanggal: str) -> Dict[str, Any]:
+        patterns = [
+            r"data\s+diterima(?:\s+SIKD)?\s+per\s+(\d{1,2}\s+[A-Za-z\.]+\s+\d{4})",
+            r"per\s+(\d{1,2}\s+[A-Za-z\.]+\s+\d{4})",
+            r"tanggal\s+pengambilan\s*[:\-]?\s*(\d{1,2}\s+[A-Za-z\.]+\s+\d{4})",
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, page_text, flags=re.IGNORECASE | re.DOTALL)
+            if match:
+                raw_date = match.group(1)
+                try:
+                    return parse_tanggal_pengambilan(raw_date), True
+                except ValueError:
+                    self.logger.warning(
+                        "Could not parse tanggal_pengambilan text '%s' for %04d-%02d",
+                        raw_date,
+                        year,
+                        month,
+                    )
+
+        generic_match = re.search(
+            r"(\d{1,2}\s+[A-Za-z\.]+\s+\d{4})",
+            page_text,
+            flags=re.IGNORECASE,
+        )
+        if generic_match:
+            raw_date = generic_match.group(1)
+            try:
+                return parse_tanggal_pengambilan(raw_date), True
+            except ValueError:
+                self.logger.warning(
+                    "Could not parse generic tanggal_pengambilan text '%s' for %04d-%02d",
+                    raw_date,
+                    year,
+                    month,
+                )
+
+        fallback_date = f"{year}-{month:02d}-01"
+        self.logger.warning(
+            "Falling back to period start date for tanggal_pengambilan: %s",
+            fallback_date,
+        )
+        return fallback_date, False
+
+    def _build_region_record(
+        self,
+        raw_row: List[str],
+        region_name: str,
+        tanggal: str,
+        nama_file: str,
+    ) -> Dict[str, Any]:
         try:
-            return build_record(region_name, self.nama_file, tanggal, raw_row)
+            return build_record(region_name, nama_file, tanggal, raw_row)
         except Exception as exc:
-            self.logger.error("validation failure for region %s: %s", region_name, exc, exc_info=True)
+            self.logger.error(
+                "validation failure for region %s: %s", region_name, exc, exc_info=True
+            )
             raise
 
-    def scrape_all_regions(self) -> List[Dict[str, Any]]:
+    def _scrape_region_period(
+        self,
+        year: int,
+        month: int,
+        region: Dict[str, str],
+        shared_tanggal_pengambilan: str | None = None,
+    ) -> tuple[List[Dict[str, Any]], str, bool]:
+        region_name = region["name"]
+        region_value = region["value"]
+        nama_file = self.get_nama_file(year, month)
         records: List[Dict[str, Any]] = []
 
-        with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=PLAYWRIGHT_HEADLESS, args=PLAYWRIGHT_ARGS)
-            page = browser.new_page(user_agent=DEFAULT_USER_AGENT, viewport={"width": 1280, "height": 800})
-            page.add_init_script("() => { Object.defineProperty(navigator, 'webdriver', {get: () => false}); }")
-            page.goto(TARGET_URL, timeout=60000)
-            page.wait_for_load_state("networkidle", timeout=60000)
-            page.wait_for_selector("#sel_periode", timeout=60000)
-            page.wait_for_selector("#sel_tahun", timeout=60000)
-            page.wait_for_selector("#sel_provinsi", timeout=60000)
-            page.wait_for_selector("#sel_pemda", timeout=60000)
+        self.logger.info("Scraping period %04d-%02d for region %s", year, month, region_name)
+        html = self._fetch_region_html(region_value, year, month)
+        raw_rows = self._extract_summary_rows(html)
+        tanggal_pengambilan, extracted = self._extract_tanggal_pengambilan(html, year, month)
+        if not extracted and shared_tanggal_pengambilan is not None:
+            self.logger.info(
+                "Using shared tanggal_pengambilan %s for region %s",
+                shared_tanggal_pengambilan,
+                region_name,
+            )
+            tanggal_pengambilan = shared_tanggal_pengambilan
+            extracted = True
 
-            self._set_select_value(page, "#sel_periode", str(self.periode))
-            self._set_select_value(page, "#sel_tahun", str(self.tahun))
-            self._set_select_value(page, "#sel_provinsi", PROVINCE_CODE)
-            self._wait_for_pemda_options(page)
+        self.logger.info(
+            "Region %s %04d-%02d: found %d rows, tanggal=%s",
+            region_name,
+            year,
+            month,
+            len(raw_rows),
+            tanggal_pengambilan,
+        )
 
-            for region in FIXED_REGIONS:
-                region_name = region["name"]
-                region_value = region["value"]
-                self.logger.info("Scraping region: %s", region_name)
+        for raw_row in raw_rows:
+            try:
+                record = self._build_region_record(
+                    raw_row, region_name, tanggal_pengambilan, nama_file
+                )
+                records.append(record)
+            except Exception as row_err:
+                self.logger.error(
+                    "Skipping row for region %s: %s | raw=%s",
+                    region_name,
+                    row_err,
+                    raw_row,
+                )
+
+        return records, tanggal_pengambilan, extracted
+
+    def scrape_regions_for_periods(
+        self,
+        start_year: int,
+        start_month: int,
+        end_year: int | None = None,
+        end_month: int | None = None,
+        regions: List[Dict[str, str]] | None = None,
+    ) -> List[Dict[str, Any]]:
+        if regions is None:
+            regions = FIXED_REGIONS
+
+        records: List[Dict[str, Any]] = []
+        periods = self._iterate_periods(start_year, start_month, end_year, end_month)
+
+        for year, month in periods:
+            self.logger.info("Starting scrape for period %04d-%02d", year, month)
+            period_tanggal_pengambilan: str | None = None
+            for region in regions:
                 try:
-                    self._set_select_value(page, "#sel_pemda", region_value)
-                    self._submit_query(page)
-                    html = page.content()
-                    raw_row = self._extract_first_summary_row(html)
-                    tanggal_pengambilan = self._extract_tanggal_pengambilan(html)
-                    record = self._build_region_record(raw_row, region_name, tanggal_pengambilan)
-                    records.append(record)
-                except PlaywrightTimeoutError as terr:
-                    self.logger.error("Timeout while scraping region %s: %s", region_name, terr)
+                    period_records, tanggal_pengambilan, extracted = self._scrape_region_period(
+                        year,
+                        month,
+                        region,
+                        shared_tanggal_pengambilan=period_tanggal_pengambilan,
+                    )
+                    records.extend(period_records)
+                    if extracted and period_tanggal_pengambilan is None:
+                        period_tanggal_pengambilan = tanggal_pengambilan
+                except requests.RequestException as req_err:
+                    self.logger.error(
+                        "HTTP error while scraping region %s for %04d-%02d: %s",
+                        region["name"],
+                        year,
+                        month,
+                        req_err,
+                    )
                 except Exception as err:
-                    self.logger.error("Failed to scrape region %s: %s", region_name, err)
-
-            browser.close()
+                    self.logger.error(
+                        "Failed to scrape region %s for %04d-%02d: %s",
+                        region["name"],
+                        year,
+                        month,
+                        err,
+                    )
+                time.sleep(1)
 
         return records
+
+    def scrape_all_regions(self) -> List[Dict[str, Any]]:
+        period_month, period_year = self._compute_reporting_period()
+        return self.scrape_regions_for_periods(period_year, period_month)

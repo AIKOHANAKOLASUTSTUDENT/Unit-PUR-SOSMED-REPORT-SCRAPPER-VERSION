@@ -4,12 +4,19 @@ import gspread
 from gspread.exceptions import APIError, WorksheetNotFound
 from google.oauth2.service_account import Credentials
 
-from config.settings import DEFAULT_WORKSHEET, GOOGLE_CREDENTIAL_PATH, GOOGLE_SHEET_ID
+from config.settings import (
+    DEFAULT_WORKSHEET,
+    FIXED_SHEET_HEADERS,
+    GOOGLE_CREDENTIAL_PATH,
+    GOOGLE_SHEET_ID,
+)
 from utils.logger import get_logger
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 RETRY_COUNT = 3
 RETRY_DELAY_SECONDS = 5
+INITIAL_WORKSHEET_ROWS = 1000
+ROW_EXPANSION_SIZE = 500
 
 
 class SpreadsheetService:
@@ -23,13 +30,7 @@ class SpreadsheetService:
         sheet_id = self._normalize_sheet_id(GOOGLE_SHEET_ID)
         credentials = Credentials.from_service_account_file(GOOGLE_CREDENTIAL_PATH, scopes=SCOPES)
         self.client = gspread.authorize(credentials)
-
-        try:
-            self.spreadsheet = self.client.open_by_key(sheet_id)
-            self.worksheet = self.spreadsheet.worksheet(DEFAULT_WORKSHEET)
-        except WorksheetNotFound as err:
-            self.logger.error("Worksheet %s not found", DEFAULT_WORKSHEET)
-            raise
+        self.spreadsheet = self.client.open_by_key(sheet_id)
 
     def _normalize_sheet_id(self, raw_sheet_id: str) -> str:
         raw_sheet_id = raw_sheet_id.strip()
@@ -43,25 +44,115 @@ class SpreadsheetService:
             raise ValueError("GOOGLE_SHEET_ID was provided but could not be parsed")
         return raw_sheet_id
 
-    def append_rows(self, rows: list) -> None:
+    def _get_or_create_worksheet(self, title: str):
+        try:
+            return self.spreadsheet.worksheet(title)
+        except WorksheetNotFound:
+            self.logger.info("Worksheet %s not found, creating a new worksheet", title)
+            return self.spreadsheet.add_worksheet(
+                title=title,
+                rows=INITIAL_WORKSHEET_ROWS,
+                cols=len(FIXED_SHEET_HEADERS),
+            )
+
+    def _ensure_headers(self, worksheet):
+        try:
+            current_header = worksheet.row_values(1)
+        except Exception:
+            current_header = []
+
+        if current_header != FIXED_SHEET_HEADERS:
+            self.logger.info("Writing header row to worksheet %s", worksheet.title)
+            last_column = chr(ord("A") + len(FIXED_SHEET_HEADERS) - 1)
+            worksheet.update(f"A1:{last_column}1", [FIXED_SHEET_HEADERS], value_input_option="USER_ENTERED")
+
+    def _load_existing_rows(self, worksheet) -> set:
+        try:
+            values = worksheet.get_all_values()
+        except Exception as err:
+            self.logger.warning(
+                "Could not load existing rows from worksheet %s: %s",
+                worksheet.title,
+                err,
+            )
+            return set()
+
+        if len(values) <= 1:
+            return set()
+
+        existing = set()
+        for row in values[1:]:
+            existing.add(tuple(str(cell).strip() for cell in row))
+        return existing
+
+    def _expand_worksheet_rows(self, worksheet, extra_rows: int = ROW_EXPANSION_SIZE) -> None:
+        try:
+            self.logger.info(
+                "Expanding worksheet %s by %d rows", worksheet.title, extra_rows
+            )
+            worksheet.add_rows(extra_rows)
+        except Exception as err:
+            self.logger.error(
+                "Failed to expand worksheet %s by %d rows: %s",
+                worksheet.title,
+                extra_rows,
+                err,
+            )
+            raise
+
+    def append_rows(self, rows: list, worksheet_title: str | None = None) -> None:
         if not rows:
             self.logger.warning("No rows provided to append")
             return
 
+        target_title = worksheet_title or DEFAULT_WORKSHEET
+        worksheet = self._get_or_create_worksheet(target_title)
+        self._ensure_headers(worksheet)
+
+        existing_rows = self._load_existing_rows(worksheet)
+        filtered_rows = []
+        for row in rows:
+            row_key = tuple(str(cell).strip() for cell in row)
+            if row_key in existing_rows:
+                self.logger.info("Skipping duplicate row for worksheet %s: %s", worksheet.title, row_key)
+                continue
+            filtered_rows.append(row)
+            existing_rows.add(row_key)
+
+        if not filtered_rows:
+            self.logger.info("No new rows to append for worksheet %s", worksheet.title)
+            return
+
         for attempt in range(1, RETRY_COUNT + 1):
             try:
-                self.worksheet.append_rows(rows, value_input_option="USER_ENTERED")
-                self.logger.info("upload success: %d rows appended", len(rows))
+                worksheet.append_rows(filtered_rows, value_input_option="USER_ENTERED")
+                self.logger.info(
+                    "upload success: %d rows appended to worksheet %s",
+                    len(filtered_rows),
+                    worksheet.title,
+                )
                 return
             except APIError as err:
-                self.logger.error("Upload attempt %d failed: %s", attempt, err)
+                self.logger.error(
+                    "Upload attempt %d failed for worksheet %s: %s",
+                    attempt,
+                    worksheet.title,
+                    err,
+                )
                 if attempt == RETRY_COUNT:
                     self.logger.error("upload failure after %d attempts", RETRY_COUNT)
                     raise
+                self._expand_worksheet_rows(worksheet)
                 time.sleep(RETRY_DELAY_SECONDS)
             except Exception as err:
-                self.logger.error("Upload attempt %d failed: %s", attempt, err)
+                self.logger.error(
+                    "Upload attempt %d failed for worksheet %s: %s",
+                    attempt,
+                    worksheet.title,
+                    err,
+                )
                 if attempt == RETRY_COUNT:
                     self.logger.error("upload failure after %d attempts", RETRY_COUNT)
                     raise
+                self._expand_worksheet_rows(worksheet)
                 time.sleep(RETRY_DELAY_SECONDS)

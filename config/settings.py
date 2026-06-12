@@ -10,6 +10,50 @@ PROVINCE_CODE = "18"
 DEFAULT_WORKSHEET = os.getenv("GOOGLE_WORKSHEET_NAME", "Sheet1")
 GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
 GOOGLE_CREDENTIAL_PATH = os.getenv("GOOGLE_CREDENTIAL_PATH")
+FIXED_SHEET_HEADERS = [
+    "Source.name",
+    "Akun",
+    "Anggaran.M",
+    "Realisasi.M",
+    "Presentase",
+    "Tanggal",
+    "Kab/Kota",
+    "Ingestion.Timestamp",
+]
+FIXED_SHEET_CATEGORIES = [
+    "Pendapatan Daerah",
+    "PAD",
+    "Pajak Daerah",
+    "Retribusi Daerah",
+    "Hasil Pengelolaan Kekayaan Daerah yang Dipisahkan",
+    "Lain-Lain PAD yang Sah",
+    "TKDD",
+    "Pendapatan Transfer Pemerintah Pusat",
+    "Pendapatan Lainnya",
+    "Pendapatan Hibah",
+    "Belanja Daerah",
+    "Belanja Pegawai",
+    "Belanja Pegawai",
+    "Belanja Barang dan Jasa",
+    "Belanja Barang dan Jasa",
+    "Belanja Modal",
+    "Belanja Modal",
+    "Belanja Lainnya",
+    "Belanja Bagi Hasil",
+    "Belanja Bantuan Keuangan",
+    "Belanja Bunga",
+    "Belanja Subsidi",
+    "Belanja Hibah",
+    "Belanja Bantuan Sosial",
+    "Belanja Tidak Terduga",
+    "Pembiayaan Daerah",
+    "Penerimaan Pembiayaan Daerah",
+    "Sisa Lebih Perhitungan Anggaran Tahun Sebelumnya",
+    "Pengeluaran Pembiayaan Daerah",
+    "Penyertaan Modal Daerah",
+    "Pembayaran Cicilan Pokok Utang yang Jatuh Tempo",
+    "Pendapatan Daerah",
+]
 PLAYWRIGHT_HEADLESS = os.getenv("PLAYWRIGHT_HEADLESS", "true").strip().lower() in ("1", "true", "yes")
 DEFAULT_USER_AGENT = os.getenv(
     "PLAYWRIGHT_USER_AGENT",

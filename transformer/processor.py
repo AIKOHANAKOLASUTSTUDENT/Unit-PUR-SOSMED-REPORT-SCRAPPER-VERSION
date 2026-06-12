@@ -10,12 +10,14 @@ def build_record(region_name: str, nama_file: str, tanggal_pengambilan: str, raw
     if len(raw_row) < 5:
         raise ValueError("Raw row does not contain enough cells")
 
+    akun = raw_row[1].strip() if len(raw_row) > 1 and raw_row[1].strip() else raw_row[0].strip()
     anggaran = parse_currency_m(raw_row[2])
     realisasi = parse_currency_m(raw_row[3])
     presentase = parse_percentage(raw_row[4])
 
     record = {
         "nama_file": nama_file,
+        "akun": akun,
         "anggaran_M": anggaran,
         "realisasi_M": realisasi,
         "presentase": presentase,

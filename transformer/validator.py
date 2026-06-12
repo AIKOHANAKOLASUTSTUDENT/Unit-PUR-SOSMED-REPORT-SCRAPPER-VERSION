@@ -3,6 +3,7 @@ from datetime import datetime
 
 REQUIRED_FIELDS = [
     "nama_file",
+    "akun",
     "anggaran_M",
     "realisasi_M",
     "presentase",
@@ -25,11 +26,11 @@ def validate_record(record: dict) -> None:
     if record["anggaran_M"] is None or record["realisasi_M"] is None:
         raise ValueError("Anggaran and realisasi values cannot be null")
 
-    if record["anggaran_M"] < 0 or record["realisasi_M"] < 0:
-        raise ValueError("Anggaran and realisasi values must be non-negative")
+    # NOTE: Nilai negatif diizinkan — data DJPK resmi bisa negatif untuk
+    # komponen Pembiayaan Daerah (pengeluaran pembiayaan, cicilan, dsb).
 
-    if not (0 <= record["presentase"] <= 100):
-        raise ValueError("Presentase must be between 0 and 100")
+    if record["presentase"] is None:
+        raise ValueError("Presentase cannot be null")
 
     try:
         datetime.fromisoformat(record["tanggal_pengambilan"])
