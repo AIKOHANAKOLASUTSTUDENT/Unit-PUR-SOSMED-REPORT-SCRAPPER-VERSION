@@ -5,10 +5,11 @@ This repository contains a Python scraper for the DJPK APBD portal (`https://djp
 
 ## Current Status
 - The main entry point is `main.py`.
-- Scraping is handled by `scraper/apbd_scraper.py` using Playwright and BeautifulSoup.
+- Scraping is handled by `scraper/apbd_scraper.py` using requests and BeautifulSoup.
 - Data is normalized and validated in `transformer/`.
 - Google Sheets upload is performed by `services.spreadsheet_service.py`.
 - The service now writes each region to its own worksheet/tab using the region name.
+- The service also writes a combined summary sheet named `APBD Kab_kota` by default, containing all rows from every region.
 - Each appended row also includes an `Ingestion.Timestamp` value.
 - Percentage values may exceed 100 and are now accepted.
 - Logging is written to `logs/scraper.log`.
@@ -16,8 +17,8 @@ This repository contains a Python scraper for the DJPK APBD portal (`https://djp
 
 ## Important Notes
 - The `.env` file must define `GOOGLE_SHEET_ID`, and either `GOOGLE_CREDENTIAL_PATH` or `GOOGLE_CREDENTIAL_PATH_B64`.
-- The project currently expects `GOOGLE_WORKSHEET_NAME`, not `GOOGLE_SHEET_NAME`.
-- The spreadsheet service now accepts either a raw sheet ID or a full Google Sheets URL.
+- The project prefers `GOOGLE_WORKSHEET_NAME`, with fallback to `GOOGLE_SHEET_NAME`.
+- The spreadsheet service accepts either a raw sheet ID or a full Google Sheets URL.
 - The service account JSON file must have access to the spreadsheet.
 
 ## Project Structure
@@ -47,6 +48,11 @@ This repository contains a Python scraper for the DJPK APBD portal (`https://djp
 - Runtime logs are written to `logs/scraper.log`.
 - Check this file first when debugging scraping or upload failures.
 
+## Recent Changes
+- Added exclusion for the `Semua Pemda` region so it is not uploaded as a separate worksheet or included in the combined summary sheet.
+- Reduced Google Sheets read usage by reusing worksheet values during append operations.
+- Added regression tests for the region exclusion behavior and existing scraper/date parsing logic.
+
 ## Known Current Issue
 - If the spreadsheet upload fails, verify:
   - `GOOGLE_WORKSHEET_NAME` is set in `.env`
@@ -57,5 +63,5 @@ This repository contains a Python scraper for the DJPK APBD portal (`https://djp
 - Run the test suite in `tests/` after any code changes.
 
 ## Recommended Next Step
-- Fix `.env` so the worksheet name variable is `GOOGLE_WORKSHEET_NAME`, not `GOOGLE_SHEET_NAME`.
 - Confirm `credentials/scrapingdjpk-15ac9bdf40fe.json` is valid and authorized.
+- Verify `.env` uses `GOOGLE_WORKSHEET_NAME` if set, or allow `GOOGLE_SHEET_NAME` as a fallback.

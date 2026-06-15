@@ -1,7 +1,7 @@
 import argparse
 from datetime import datetime
 
-from config.settings import FIXED_REGIONS
+from config.settings import FIXED_REGIONS, SUMMARY_WORKSHEET
 from services.spreadsheet_service import SpreadsheetService
 from scraper.apbd_scraper import APBDScraper
 from transformer.processor import deduplicate_records
@@ -62,6 +62,10 @@ def _group_records(records: list[dict]) -> dict:
     return grouped_records
 
 
+def _is_excluded_region(region_name: str) -> bool:
+    return region_name.strip().lower() == "semua pemda"
+
+
 def _upload_grouped_records(grouped_records: dict) -> None:
     if not grouped_records:
         logger.warning("No grouped records to upload")
@@ -71,10 +75,24 @@ def _upload_grouped_records(grouped_records: dict) -> None:
     _validate_region_groups(grouped_records)
 
     total_rows = 0
+    all_rows = []
     for region_name, rows in grouped_records.items():
+        if _is_excluded_region(region_name):
+            logger.info("Skipping excluded region %s", region_name)
+            continue
+
         service.append_rows(rows, worksheet_title=region_name)
         total_rows += len(rows)
+        all_rows.extend(rows)
         logger.info("uploaded %d rows to worksheet %s", len(rows), region_name)
+
+    if all_rows:
+        service.append_rows(all_rows, worksheet_title=SUMMARY_WORKSHEET)
+        logger.info(
+            "uploaded %d rows to worksheet %s",
+            len(all_rows),
+            SUMMARY_WORKSHEET,
+        )
 
     logger.info("scraping success")
     logger.info("total rows uploaded %d", total_rows)

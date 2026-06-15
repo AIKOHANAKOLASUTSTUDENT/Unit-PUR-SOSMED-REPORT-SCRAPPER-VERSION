@@ -31,6 +31,9 @@ class SpreadsheetService:
         credentials = Credentials.from_service_account_file(GOOGLE_CREDENTIAL_PATH, scopes=SCOPES)
         self.client = gspread.authorize(credentials)
         self.spreadsheet = self.client.open_by_key(sheet_id)
+        self._worksheet_cache = {
+            worksheet.title: worksheet for worksheet in self.spreadsheet.worksheets()
+        }
 
     def _normalize_sheet_id(self, raw_sheet_id: str) -> str:
         raw_sheet_id = raw_sheet_id.strip()
@@ -45,38 +48,42 @@ class SpreadsheetService:
         return raw_sheet_id
 
     def _get_or_create_worksheet(self, title: str):
+        if title in self._worksheet_cache:
+            return self._worksheet_cache[title]
+
         try:
-            return self.spreadsheet.worksheet(title)
+            worksheet = self.spreadsheet.worksheet(title)
         except WorksheetNotFound:
             self.logger.info("Worksheet %s not found, creating a new worksheet", title)
-            return self.spreadsheet.add_worksheet(
+            worksheet = self.spreadsheet.add_worksheet(
                 title=title,
                 rows=INITIAL_WORKSHEET_ROWS,
                 cols=len(FIXED_SHEET_HEADERS),
             )
 
-    def _ensure_headers(self, worksheet):
+        self._worksheet_cache[title] = worksheet
+        return worksheet
+
+    def _load_worksheet_values(self, worksheet):
         try:
-            current_header = worksheet.row_values(1)
-        except Exception:
-            current_header = []
+            return worksheet.get_all_values()
+        except Exception as err:
+            self.logger.warning(
+                "Could not load values from worksheet %s: %s",
+                worksheet.title,
+                err,
+            )
+            return []
+
+    def _ensure_headers(self, worksheet, values: list):
+        current_header = values[0] if values else []
 
         if current_header != FIXED_SHEET_HEADERS:
             self.logger.info("Writing header row to worksheet %s", worksheet.title)
             last_column = chr(ord("A") + len(FIXED_SHEET_HEADERS) - 1)
             worksheet.update(f"A1:{last_column}1", [FIXED_SHEET_HEADERS], value_input_option="USER_ENTERED")
 
-    def _load_existing_rows(self, worksheet) -> set:
-        try:
-            values = worksheet.get_all_values()
-        except Exception as err:
-            self.logger.warning(
-                "Could not load existing rows from worksheet %s: %s",
-                worksheet.title,
-                err,
-            )
-            return set()
-
+    def _load_existing_rows(self, values: list) -> set:
         if len(values) <= 1:
             return set()
 
@@ -107,9 +114,10 @@ class SpreadsheetService:
 
         target_title = worksheet_title or DEFAULT_WORKSHEET
         worksheet = self._get_or_create_worksheet(target_title)
-        self._ensure_headers(worksheet)
+        values = self._load_worksheet_values(worksheet)
+        self._ensure_headers(worksheet, values)
 
-        existing_rows = self._load_existing_rows(worksheet)
+        existing_rows = self._load_existing_rows(values)
         filtered_rows = []
         for row in rows:
             row_key = tuple(str(cell).strip() for cell in row)

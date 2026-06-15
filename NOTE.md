@@ -10,6 +10,7 @@
 - `main.py` now writes grouped rows into region-specific worksheets instead of a single default sheet.
 - `services.spreadsheet_service.py` now ensures headers, appends rows safely, expands the worksheet when full, and skips exact duplicate rows.
 - A new `Ingestion.Timestamp` column is included on each appended row.
+- The scraping logic uses requests and BeautifulSoup; Playwright is no longer required for the current flow.
 - The desired future format remains:
   - each region gets its own worksheet/tab
   - each worksheet follows the example spreadsheet layout
@@ -25,6 +26,16 @@
 3. Verify that our region worksheet names match the expected tab names exactly.
 4. Review deduplication strategy for special cases where new rows may match existing rows exactly but should still be retained.
 5. Keep the current validation and normalization behavior in place.
+6. Confirm whether `Semua Pemda` should be excluded from scraping results and summary uploads for all runs.
+
+## Recent changes
+- Excluded the `Semua Pemda` selection from summary worksheet uploads and region-specific worksheet creation.
+- Updated upload logic so only real region worksheets are written and sent to `APBD Kab_kota`.
+- Improved Google Sheets quota behavior by reusing worksheet values during header validation and duplicate filtering.
+- Added tests to protect against `Semua Pemda` being included in uploads.
+
+## Next update task
+- implement region-specific worksheet selection and row grouping once the example format is confirmed
 
 ## Change summary
 - `scraper/apbd_scraper.py`: added direct GET scraping, historical period support, shared `tanggal_pengambilan` fallback, and robust row extraction.
@@ -83,15 +94,10 @@
 - `Presentase` may be greater than 100 and should not be rejected.
 
 ## Current limitation
-- The code currently assumes a single worksheet and appends rows as:
-  `nama_file`, `anggaran_M`, `realisasi_M`, `presentase`, `tanggal_pengambilan`, `kab_kota`
-- This is not sufficient for a future design where each region has its own sheet.
+- The code now writes each region to its own worksheet, but the exact worksheet tab names and expected column layout should still be verified against the target spreadsheet.
 
 ## What I need from you
 - the example spreadsheet or a screenshot of the sheet layout
 - the exact header row and any extra columns required per region
 - whether the region worksheet names should match `kab_kota` values exactly
 - whether the scraper should create missing worksheets automatically
-
-## Next update task
-- implement region-specific worksheet selection and row grouping once the example format is confirmed

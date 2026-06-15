@@ -7,7 +7,11 @@ load_dotenv(ROOT_DIR / ".env")
 
 TARGET_URL = "https://djpk.kemenkeu.go.id/portal/data/apbd"
 PROVINCE_CODE = "18"
-DEFAULT_WORKSHEET = os.getenv("GOOGLE_WORKSHEET_NAME", "Sheet1")
+DEFAULT_WORKSHEET = os.getenv(
+    "GOOGLE_WORKSHEET_NAME",
+    os.getenv("GOOGLE_SHEET_NAME", "Sheet1"),
+)
+SUMMARY_WORKSHEET = os.getenv("GOOGLE_SUMMARY_WORKSHEET", "APBD Kab_kota")
 GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
 GOOGLE_CREDENTIAL_PATH = os.getenv("GOOGLE_CREDENTIAL_PATH")
 GOOGLE_CREDENTIAL_PATH_B64 = os.getenv("GOOGLE_CREDENTIAL_PATH_B64") or os.getenv("GOOGLE_CREDENTIAL_JSON_B64")
@@ -34,7 +38,17 @@ FIXED_SHEET_HEADERS = [
     "Ingestion.Timestamp",
 ]
 FIXED_SHEET_CATEGORIES = [
-    "Pendapatan Daerah",
+   
+    "Belanja Modal",
+    "Belanja Lainnya",
+    "Belanja Bagi Hasil",
+    "Belanja Bantuan Keuangan",
+    "Belanja Bunga",
+    "Belanja Subsidi",
+    "Belanja Hibah",
+    "Belanja Bantuan Sosial",
+    "Belanja Tidak Terduga",
+    "Pembiayaan Daerah", "Pendapatan Daerah",
     "PAD",
     "Pajak Daerah",
     "Retribusi Daerah",
@@ -50,16 +64,6 @@ FIXED_SHEET_CATEGORIES = [
     "Belanja Barang dan Jasa",
     "Belanja Barang dan Jasa",
     "Belanja Modal",
-    "Belanja Modal",
-    "Belanja Lainnya",
-    "Belanja Bagi Hasil",
-    "Belanja Bantuan Keuangan",
-    "Belanja Bunga",
-    "Belanja Subsidi",
-    "Belanja Hibah",
-    "Belanja Bantuan Sosial",
-    "Belanja Tidak Terduga",
-    "Pembiayaan Daerah",
     "Penerimaan Pembiayaan Daerah",
     "Sisa Lebih Perhitungan Anggaran Tahun Sebelumnya",
     "Pengeluaran Pembiayaan Daerah",
