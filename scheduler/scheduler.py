@@ -1,5 +1,11 @@
+import sys
+from pathlib import Path
+
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT_DIR))
 
 from main import run_scrape_and_upload
 from utils.logger import get_logger
