@@ -1,0 +1,18 @@
+{
+    "sourceFile": "setup.sh",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1782112189942,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1782112189942,
+            "name": "Commit-0",
+            "content": "#!/bin/bash\n\nset -e\n\necho \"Creating Python virtual environment...\"\npython -m venv venv\n\necho \"Activating virtual environment...\"\nsource venv/Scripts/activate || . venv/Scripts/activate\n\necho \"Installing Python dependencies...\"\npip install -r requirements.txt\n\necho \"Installing Playwright Chromium...\"\nplaywright install chromium\n\necho \"Creating necessary directories...\"\nmkdir -p logs input credentials\n\necho \"Setup complete! Next steps:\"\necho \"1. Edit .env file with your Google Sheets ID and credentials\"\necho \"2. Edit .env with your Instagram username and password\"\necho \"3. Add Instagram URLs to input/urls.txt\"\necho \"4. Run: python main.py\"\n"
+        }
+    ]
+}

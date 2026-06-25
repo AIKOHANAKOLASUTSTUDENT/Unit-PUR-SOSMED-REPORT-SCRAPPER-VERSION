@@ -1,0 +1,22 @@
+{
+    "sourceFile": "tests/test_scraper.py",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 1,
+            "patches": [
+                {
+                    "date": 1782112452287,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1782279962428,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -13,11 +13,15 @@\n         scraper = InstagramScraper(strategy=\"instaloader\")\r\n         assert scraper.strategy == \"instaloader\"\r\n     \r\n     def test_init_with_playwright_strategy(self):\r\n-        scraper = InstagramScraper(strategy=\"playwright\")\r\n-        assert scraper.strategy == \"playwright\"\r\n+        with pytest.raises(ValueError):\r\n+            InstagramScraper(strategy=\"playwright\")\r\n     \r\n+    def test_init_with_apify_strategy(self):\r\n+        scraper = InstagramScraper(strategy=\"apify\")\r\n+        assert scraper.strategy == \"apify\"\r\n+    \r\n     def test_init_with_invalid_strategy(self):\r\n         with pytest.raises(ValueError):\r\n             InstagramScraper(strategy=\"invalid\")\r\n     \r\n"
+                }
+            ],
+            "date": 1782112452287,
+            "name": "Commit-0",
+            "content": "\"\"\"\r\nUnit tests for scraper/instagram_scraper.py\r\n\"\"\"\r\n\r\nimport pytest\r\nfrom scraper.instagram_scraper import InstagramScraper\r\n\r\n\r\nclass TestInstagramScraperInit:\r\n    \"\"\"Test cases for InstagramScraper initialization.\"\"\"\r\n    \r\n    def test_init_with_instaloader_strategy(self):\r\n        scraper = InstagramScraper(strategy=\"instaloader\")\r\n        assert scraper.strategy == \"instaloader\"\r\n    \r\n    def test_init_with_playwright_strategy(self):\r\n        scraper = InstagramScraper(strategy=\"playwright\")\r\n        assert scraper.strategy == \"playwright\"\r\n    \r\n    def test_init_with_invalid_strategy(self):\r\n        with pytest.raises(ValueError):\r\n            InstagramScraper(strategy=\"invalid\")\r\n    \r\n    def test_init_case_insensitive(self):\r\n        scraper = InstagramScraper(strategy=\"INSTALOADER\")\r\n        assert scraper.strategy == \"instaloader\"\r\n\r\n\r\nclass TestExtractShortcode:\r\n    \"\"\"Test cases for _extract_shortcode helper method.\"\"\"\r\n    \r\n    def test_extract_shortcode_from_post_url(self):\r\n        url = \"https://www.instagram.com/p/ABC123def-_456/\"\r\n        shortcode = InstagramScraper._extract_shortcode(url)\r\n        assert shortcode == \"ABC123def-_456\"\r\n    \r\n    def test_extract_shortcode_from_reel_url(self):\r\n        url = \"https://www.instagram.com/reel/XYZ789_ABC/\"\r\n        shortcode = InstagramScraper._extract_shortcode(url)\r\n        assert shortcode == \"XYZ789_ABC\"\r\n    \r\n    def test_extract_shortcode_malformed_url(self):\r\n        url = \"https://www.instagram.com/profile/username/\"\r\n        with pytest.raises(ValueError):\r\n            InstagramScraper._extract_shortcode(url)\r\n    \r\n    def test_extract_shortcode_with_query_params(self):\r\n        url = \"https://www.instagram.com/p/ABC123/?utm_source=test\"\r\n        shortcode = InstagramScraper._extract_shortcode(url)\r\n        assert shortcode == \"ABC123\"\r\n    \r\n    def test_extract_shortcode_handles_underscores_dashes(self):\r\n        url = \"https://www.instagram.com/p/A-B_C-D_E-F/\"\r\n        shortcode = InstagramScraper._extract_shortcode(url)\r\n        assert shortcode == \"A-B_C-D_E-F\"\r\n"
+        }
+    ]
+}

@@ -1,0 +1,18 @@
+{
+    "sourceFile": "utils/logger.py",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1782112243086,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1782112243086,
+            "name": "Commit-0",
+            "content": "\"\"\"\r\nLogger configuration for Instagram Engagement Scraper.\r\nProvides a pre-configured logger that writes to console and file.\r\n\"\"\"\r\n\r\nimport logging\r\nimport os\r\nfrom pathlib import Path\r\n\r\ndef get_logger(name: str = \"instagram_scraper\") -> logging.Logger:\r\n    \"\"\"\r\n    Get a configured logger instance.\r\n    \r\n    Args:\r\n        name: Logger name, defaults to \"instagram_scraper\"\r\n    \r\n    Returns:\r\n        Configured logger instance\r\n    \"\"\"\r\n    logger = logging.getLogger(name)\r\n    \r\n    # Only configure if not already configured\r\n    if not logger.handlers:\r\n        logger.setLevel(logging.DEBUG)\r\n        \r\n        # Create logs directory if it doesn't exist\r\n        logs_dir = Path(\"logs\")\r\n        logs_dir.mkdir(exist_ok=True)\r\n        \r\n        # Console handler - INFO and above\r\n        console_handler = logging.StreamHandler()\r\n        console_handler.setLevel(logging.INFO)\r\n        console_formatter = logging.Formatter(\"[%(levelname)s] %(asctime)s — %(message)s\", \r\n                                              datefmt=\"%Y-%m-%d %H:%M:%S\")\r\n        console_handler.setFormatter(console_formatter)\r\n        logger.addHandler(console_handler)\r\n        \r\n        # File handler - DEBUG and above\r\n        file_handler = logging.FileHandler(logs_dir / \"scraper.log\", encoding=\"utf-8\")\r\n        file_handler.setLevel(logging.DEBUG)\r\n        file_formatter = logging.Formatter(\r\n            \"[%(levelname)s] %(asctime)s — %(filename)s:%(lineno)d — %(message)s\",\r\n            datefmt=\"%Y-%m-%d %H:%M:%S\"\r\n        )\r\n        file_handler.setFormatter(file_formatter)\r\n        logger.addHandler(file_handler)\r\n    \r\n    return logger\r\n\r\n"
+        }
+    ]
+}

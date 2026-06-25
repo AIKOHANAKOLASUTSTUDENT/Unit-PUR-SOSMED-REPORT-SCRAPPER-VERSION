@@ -1,0 +1,18 @@
+{
+    "sourceFile": "run_dashboard.sh",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1782176645019,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1782176645019,
+            "name": "Commit-0",
+            "content": "#!/bin/bash\nsource .venv/Scripts/activate\nstreamlit run dashboard.py\n"
+        }
+    ]
+}

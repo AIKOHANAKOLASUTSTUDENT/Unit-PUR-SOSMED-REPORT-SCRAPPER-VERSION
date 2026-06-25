@@ -1,0 +1,5 @@
+# Add one Instagram URL per line
+# Lines starting with # are ignored
+# Example:
+# https://www.instagram.com/p/EXAMPLE1/
+# https://www.instagram.com/reel/EXAMPLE2/

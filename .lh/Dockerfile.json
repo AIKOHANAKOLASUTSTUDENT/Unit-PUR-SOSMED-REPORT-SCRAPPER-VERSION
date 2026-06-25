@@ -1,0 +1,18 @@
+{
+    "sourceFile": "Dockerfile",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1782112526392,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1782112526392,
+            "name": "Commit-0",
+            "content": "FROM python:3.11-slim\r\n\r\nWORKDIR /app\r\n\r\nRUN apt-get update && apt-get install -y \\\r\n    libglib2.0-0 libnss3 libnspr4 libatk1.0-0 \\\r\n    libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 \\\r\n    libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \\\r\n    libgbm1 libpango-1.0-0 libcairo2 libasound2 \\\r\n    && rm -rf /var/lib/apt/lists/*\r\n\r\nCOPY requirements.txt .\r\nRUN pip install --no-cache-dir -r requirements.txt\r\nRUN playwright install chromium\r\n\r\nCOPY . .\r\nRUN mkdir -p logs input credentials\r\n\r\nCMD [\"python\", \"main.py\"]\r\n"
+        }
+    ]
+}

@@ -1,0 +1,38 @@
+{
+    "sourceFile": "requirements.txt",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 5,
+            "patches": [
+                {
+                    "date": 1782112189942,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1782176639535,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -8,4 +8,6 @@\n instaloader==4.11\r\n pytz==2024.1\r\n pytest==8.2.0\r\n pytest-asyncio==0.23.7\r\n+streamlit>=1.35.0\r\n+pandas>=2.0.0\r\n"
+                },
+                {
+                    "date": 1782180380475,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -4,9 +4,9 @@\n gspread==6.1.2\r\n google-auth==2.29.0\r\n google-auth-oauthlib==1.2.0\r\n python-dotenv==1.0.1\r\n-instaloader==4.11\r\n+instaloader>=4.15.1\r\n pytz==2024.1\r\n pytest==8.2.0\r\n pytest-asyncio==0.23.7\r\n streamlit>=1.35.0\r\n"
+                },
+                {
+                    "date": 1782258914598,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -1,5 +1,5 @@\n-playwright==1.44.0\r\n+playwright>=1.40.0\r\n beautifulsoup4==4.12.3\r\n requests==2.31.0\r\n gspread==6.1.2\r\n google-auth==2.29.0\r\n"
+                },
+                {
+                    "date": 1782262701520,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -1,13 +1,11 @@\n+streamlit>=1.35.0\r\n+pandas>=2.0.0\r\n+instaloader>=4.15.1\r\n playwright>=1.40.0\r\n beautifulsoup4==4.12.3\r\n requests==2.31.0\r\n gspread==6.1.2\r\n google-auth==2.29.0\r\n google-auth-oauthlib==1.2.0\r\n python-dotenv==1.0.1\r\n-instaloader>=4.15.1\r\n pytz==2024.1\r\n-pytest==8.2.0\r\n-pytest-asyncio==0.23.7\r\n-streamlit>=1.35.0\r\n-pandas>=2.0.0\r\n"
+                },
+                {
+                    "date": 1782289313773,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -8,4 +8,5 @@\n google-auth==2.29.0\r\n google-auth-oauthlib==1.2.0\r\n python-dotenv==1.0.1\r\n pytz==2024.1\r\n+python-dateutil>=2.8.2\r\n"
+                }
+            ],
+            "date": 1782112189942,
+            "name": "Commit-0",
+            "content": "playwright==1.44.0\r\nbeautifulsoup4==4.12.3\r\nrequests==2.31.0\r\ngspread==6.1.2\r\ngoogle-auth==2.29.0\r\ngoogle-auth-oauthlib==1.2.0\r\npython-dotenv==1.0.1\r\ninstaloader==4.11\r\npytz==2024.1\r\npytest==8.2.0\r\npytest-asyncio==0.23.7\r\n"
+        }
+    ]
+}
