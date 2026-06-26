@@ -43,7 +43,6 @@ def process_record(raw: Dict[str, Any]) -> Dict[str, Any]:
         "reposts": "N/A",
         "saves": "N/A",
         "shares": "N/A",
-        "reach_display": "N/A",
         "followers": "N/A",
         "username": "",
         "caption": "",

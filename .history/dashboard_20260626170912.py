@@ -2,6 +2,7 @@
 Streamlit web dashboard for Instagram Engagement Scraper.
 Provides a user-friendly interface for scraping Instagram URLs without coding.
 """
+
 import streamlit as st
 import pandas as pd
 import re
@@ -21,9 +22,14 @@ except Exception as e:
     HAS_SPREADSHEET_SERVICE = False
     spreadsheet_import_error = e
 
-logger = get_logger()
+# Page config - MUST be first Streamlit call
+st.set_page_config(
+    page_title="Instagram Engagement Report",
+    page_icon="📊",
+    layout="wide"
+)
 
-# Initialize Streamlit session state keys used by the app to avoid KeyError
+# Initialize session state
 if "has_results" not in st.session_state:
     st.session_state["has_results"] = False
 if "results" not in st.session_state:
@@ -32,6 +38,8 @@ if "invalid" not in st.session_state:
     st.session_state["invalid"] = []
 if "appended_count" not in st.session_state:
     st.session_state["appended_count"] = 0
+
+logger = get_logger()
 
 # Check optional scraping dependencies via scraper module flags (non-fatal)
 try:
@@ -55,7 +63,7 @@ if not HAS_BS4:
 
 if missing:
     msg = (
-        "Beberapa modul optional tidak ditemukan: " + ", ".join(missing) +
+        "Beberapa modul optional tidak ditemukan: " + ", ".join(missing) + 
         ".\nScraping akan mencoba fallback, tetapi untuk fungsionalitas penuh, install modul-modul ini."
     )
     logger.warning(msg)
@@ -328,9 +336,6 @@ if st.session_state["has_results"] and len(st.session_state["results"]) > 0:
             return ""
 
     df["Bulan"] = df["Tanggal yang post date"].apply(_extract_month)
-    # Avoid ValueError when 'No' already exists: drop placeholder then insert
-    if "No" in df.columns:
-        df = df.drop(columns=["No"])
     df.insert(0, "No", range(1, len(df) + 1))
     df = df[[
         "No", "Bulan", "Tanggal yang post date", "Judul Konten", "Content Type", "Username", "Link IG",

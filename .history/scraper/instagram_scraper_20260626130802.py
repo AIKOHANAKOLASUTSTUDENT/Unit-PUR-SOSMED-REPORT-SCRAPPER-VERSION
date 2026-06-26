@@ -25,18 +25,6 @@ except Exception:
     TwoFactorAuthRequiredException = Exception
     HAS_INSTALOADER = False
 
-try:
-    import playwright
-    HAS_PLAYWRIGHT = True
-except Exception:
-    HAS_PLAYWRIGHT = False
-
-try:
-    import bs4
-    HAS_BS4 = True
-except Exception:
-    HAS_BS4 = False
-
 from config.settings import (
     APIFY_TOKEN,
     INSTAGRAM_USERNAME,

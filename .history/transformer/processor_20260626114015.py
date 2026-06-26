@@ -16,7 +16,6 @@ from .normalizer import (
 )
 from config.settings import TIMEZONE, CAPTION_PREVIEW_LENGTH
 from utils.logger import get_logger
-from config.settings import INSTAGRAM_USERNAME
 
 
 def process_record(raw: Dict[str, Any]) -> Dict[str, Any]:
@@ -43,7 +42,6 @@ def process_record(raw: Dict[str, Any]) -> Dict[str, Any]:
         "reposts": "N/A",
         "saves": "N/A",
         "shares": "N/A",
-        "reach_display": "N/A",
         "followers": "N/A",
         "username": "",
         "caption": "",
@@ -71,18 +69,7 @@ def process_record(raw: Dict[str, Any]) -> Dict[str, Any]:
         cleaned["username"] = raw.get("username_raw", "") if isinstance(raw, dict) else ""
         caption_raw = raw.get("caption_raw") if isinstance(raw, dict) else None
         cleaned["caption"] = normalize_caption(caption_raw, CAPTION_PREVIEW_LENGTH)
-        cleaned["collab_status"] = normalize_collab_status(caption_raw, cleaned["username"])
-        # Build display value for Reach: if uploader is the CBP account, show numeric reach;
-        # otherwise show a plain label indicating non-CBP content.
-        try:
-            cbp_handle = (INSTAGRAM_USERNAME or "").strip().lower()
-            author = (cleaned.get("username") or "").strip().lower()
-            if author and cbp_handle and author == cbp_handle:
-                cleaned["reach_display"] = cleaned.get("reach", "N/A")
-            else:
-                cleaned["reach_display"] = "bukan konten dari akun cbp KPwBI Sulut"
-        except Exception:
-            cleaned["reach_display"] = cleaned.get("reach", "N/A")
+        cleaned["collab_status"] = normalize_collab_status(caption_raw)
     except Exception as exc:
         logger.warning("Failed to process raw record: %s", exc)
 

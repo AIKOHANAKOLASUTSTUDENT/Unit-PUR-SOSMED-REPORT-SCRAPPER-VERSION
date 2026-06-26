@@ -2,65 +2,90 @@
 Streamlit web dashboard for Instagram Engagement Scraper.
 Provides a user-friendly interface for scraping Instagram URLs without coding.
 """
-import streamlit as st
-import pandas as pd
-import re
-from typing import List
-from config.settings import SCRAPER_STRATEGY, GOOGLE_SHEET_ID, META_ACCESS_TOKEN
-from scraper.instagram_scraper import InstagramScraper
-from transformer.processor import process_record
-from transformer.validator import validate_record
-from utils.logger import get_logger
 
-# Lazy import SpreadsheetService so missing Google packages do not crash dashboard startup
-try:
-    from services.spreadsheet_service import SpreadsheetService
-    HAS_SPREADSHEET_SERVICE = True
-except Exception as e:
-    SpreadsheetService = None
-    HAS_SPREADSHEET_SERVICE = False
-    spreadsheet_import_error = e
+    # Build DataFrame from processed results
+    df = pd.DataFrame(results)
 
-logger = get_logger()
+    # Sort results oldest -> newest by post_date (if available)
+    if "post_date" in df.columns:
+        try:
+            df["_post_dt"] = pd.to_datetime(df["post_date"], errors="coerce")
+            df = df.sort_values(by="_post_dt", ascending=True).reset_index(drop=True)
+            df.drop(columns=["_post_dt"], inplace=True)
+        except Exception:
+            pass
 
-# Initialize Streamlit session state keys used by the app to avoid KeyError
-if "has_results" not in st.session_state:
-    st.session_state["has_results"] = False
-if "results" not in st.session_state:
-    st.session_state["results"] = []
-if "invalid" not in st.session_state:
-    st.session_state["invalid"] = []
-if "appended_count" not in st.session_state:
-    st.session_state["appended_count"] = 0
+    # Friendly display mapping for content types (keep icons)
+    if "content_type" in df.columns:
+        df["content_type"] = df["content_type"].map(
+            {
+                "Reel": "🎬 Reel",
+                "Post": "🖼️ Post",
+                "Carousel": "🎠 Carousel",
+            }
+        ).fillna(df["content_type"])
 
-# Check optional scraping dependencies via scraper module flags (non-fatal)
-try:
-    import scraper.instagram_scraper as _insta_mod
-    HAS_INSTALOADER = getattr(_insta_mod, "HAS_INSTALOADER", False)
-    HAS_PLAYWRIGHT = getattr(_insta_mod, "HAS_PLAYWRIGHT", False)
-    HAS_BS4 = getattr(_insta_mod, "HAS_BS4", False)
-except Exception:
-    HAS_INSTALOADER = False
-    HAS_PLAYWRIGHT = False
-    HAS_BS4 = False
+    # If processor produced `reach_display`, prefer that as canonical reach value
+    if "reach_display" in df.columns and "reach" not in df.columns:
+        df["reach"] = df["reach_display"]
 
-# Show friendly warnings for missing optional deps (do not crash app)
-missing = []
-if not HAS_INSTALOADER:
-    missing.append("instaloader")
-if not HAS_PLAYWRIGHT:
-    missing.append("playwright")
-if not HAS_BS4:
-    missing.append("beautifulsoup4")
+    # Rename lowercase scraper fields to dashboard display names
+    rename_map = {
+        "url": "Link IG",
+        "content_type": "Content Type",
+        "post_date": "Tanggal yang post date",
+        "likes": "Likes",
+        "comments": "Comment",
+        "views": "Views",
+        "reach": "Reach",
+        "reposts": "Repost",
+        "saves": "Save",
+        "shares": "Share",
+        "username": "Username",
+        "caption": "Judul Konten",
+        "collab_status": "Collab Status",
+    }
+    df = df.rename(columns=rename_map)
 
-if missing:
-    msg = (
-        "Beberapa modul optional tidak ditemukan: " + ", ".join(missing) +
-        ".\nScraping akan mencoba fallback, tetapi untuk fungsionalitas penuh, install modul-modul ini."
-    )
-    logger.warning(msg)
-    st.warning(msg)
+    # Ensure Collab Status column exists
+    if "Collab Status" not in df.columns:
+        df["Collab Status"] = "belum collab"
 
+    # Convert 'Tanggal yang post date' into Indonesian 'Bulan YYYY' (e.g. "Juni 2024")
+    def _format_month_year(date_value: str) -> str:
+        if not date_value or date_value == "N/A":
+            return ""
+        try:
+            parsed = pd.to_datetime(date_value, errors="coerce")
+            if pd.isna(parsed):
+                return ""
+            month_map = {
+                1: "Januari", 2: "Februari", 3: "Maret", 4: "April",
+                5: "Mei", 6: "Juni", 7: "Juli", 8: "Agustus",
+                9: "September", 10: "Oktober", 11: "November", 12: "Desember",
+            }
+            return f"{month_map.get(parsed.month, '')} {parsed.year}"
+        except Exception:
+            return ""
+
+    # Create 'Bulan' column safely (only if the date column exists)
+    if "Tanggal yang post date" in df.columns:
+        df["Bulan"] = df["Tanggal yang post date"].apply(_format_month_year)
+    else:
+        df["Bulan"] = ""
+
+    # Ensure 'No' column isn't duplicated — drop if already present, then insert at position 0
+    if "No" in df.columns:
+        df = df.drop(columns=["No"])
+    df.insert(0, "No", range(1, len(df) + 1))
+
+    # Final safe column selection: only keep columns that actually exist
+    final_cols = [
+        "No", "Bulan", "Tanggal yang post date", "Judul Konten", "Content Type",
+        "Username", "Link IG", "Reach", "Views", "Likes", "Comment",
+        "Share", "Repost", "Save", "Collab Status"
+    ]
+    df = df[[c for c in final_cols if c in df.columns]]
 if not HAS_SPREADSHEET_SERVICE:
     spreadsheet_msg = (
         "Google Sheets upload tidak tersedia karena modul Sheets tidak terinstal atau konfigurasi gagal. "
@@ -328,9 +353,6 @@ if st.session_state["has_results"] and len(st.session_state["results"]) > 0:
             return ""
 
     df["Bulan"] = df["Tanggal yang post date"].apply(_extract_month)
-    # Avoid ValueError when 'No' already exists: drop placeholder then insert
-    if "No" in df.columns:
-        df = df.drop(columns=["No"])
     df.insert(0, "No", range(1, len(df) + 1))
     df = df[[
         "No", "Bulan", "Tanggal yang post date", "Judul Konten", "Content Type", "Username", "Link IG",

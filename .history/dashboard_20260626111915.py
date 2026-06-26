@@ -2,6 +2,7 @@
 Streamlit web dashboard for Instagram Engagement Scraper.
 Provides a user-friendly interface for scraping Instagram URLs without coding.
 """
+
 import streamlit as st
 import pandas as pd
 import re
@@ -21,9 +22,14 @@ except Exception as e:
     HAS_SPREADSHEET_SERVICE = False
     spreadsheet_import_error = e
 
-logger = get_logger()
+# Page config - MUST be first Streamlit call
+st.set_page_config(
+    page_title="Instagram Engagement Report",
+    page_icon="📊",
+    layout="wide"
+)
 
-# Initialize Streamlit session state keys used by the app to avoid KeyError
+# Initialize session state
 if "has_results" not in st.session_state:
     st.session_state["has_results"] = False
 if "results" not in st.session_state:
@@ -32,6 +38,8 @@ if "invalid" not in st.session_state:
     st.session_state["invalid"] = []
 if "appended_count" not in st.session_state:
     st.session_state["appended_count"] = 0
+
+logger = get_logger()
 
 # Check optional scraping dependencies via scraper module flags (non-fatal)
 try:
@@ -55,7 +63,7 @@ if not HAS_BS4:
 
 if missing:
     msg = (
-        "Beberapa modul optional tidak ditemukan: " + ", ".join(missing) +
+        "Beberapa modul optional tidak ditemukan: " + ", ".join(missing) + 
         ".\nScraping akan mencoba fallback, tetapi untuk fungsionalitas penuh, install modul-modul ini."
     )
     logger.warning(msg)
@@ -191,10 +199,17 @@ if scrape_clicked and len(parsed_urls) > 0:
             else:
                 invalid_records.append({"url": record.get("url"), "reason": reason})
         
-        # Do not upload to Google Sheets automatically. Wait for user confirmation first.
+        if HAS_SPREADSHEET_SERVICE:
+            service = SpreadsheetService()
+            service.ensure_header()
+            appended = service.append_rows(valid_records)
+        else:
+            appended = 0
+            st.warning("Google Sheets upload tidak dilakukan karena SpreadsheetService tidak tersedia.")
+        
         st.session_state["results"] = valid_records
         st.session_state["invalid"] = invalid_records
-        st.session_state["appended_count"] = 0
+        st.session_state["appended_count"] = appended
         st.session_state["has_results"] = True
         
         st.success(f"✅ Scraping selesai! {len(valid_records)} data berhasil diproses.")
@@ -238,21 +253,6 @@ if st.session_state["has_results"] and len(st.session_state["results"]) > 0:
     
     # Display results table
     df = pd.DataFrame(results)
-    # Defensive logging to help debug missing columns (helps reproduce KeyError)
-    logger.info("Result DataFrame columns (initial): %s", df.columns.tolist())
-    try:
-        st.caption(f"Columns found: {df.columns.tolist()}")
-    except Exception:
-        # In case Streamlit can't render caption in some environments, continue silently
-        logger.debug("Unable to render columns caption in Streamlit UI.")
-    # Sort results oldest -> newest by post_date (if available)
-    if "post_date" in df.columns:
-        try:
-            df["_post_dt"] = pd.to_datetime(df["post_date"], errors="coerce")
-            df = df.sort_values(by="_post_dt", ascending=True).reset_index(drop=True)
-            df.drop(columns=["_post_dt"], inplace=True)
-        except Exception:
-            pass
     df["content_type"] = df["content_type"].map(
         {
             "Reel": "🎬 Reel",
@@ -260,83 +260,14 @@ if st.session_state["has_results"] and len(st.session_state["results"]) > 0:
             "Carousel": "🎠 Carousel",
         }
     ).fillna(df["content_type"])
-
-    df = df.rename(columns={
-        "url": "Link IG",
-        "post_date": "Tanggal yang post date",
-        "caption": "Judul Konten",
-        "content_type": "Content Type",
-        "username": "Username",
-        "collab_status": "Collab Status",
-        "views": "Views",
-        "likes": "Likes",
-        "comments": "Comment",
-        "shares": "Share",
-        "reposts": "Repost",
-        "saves": "Save",
-        "reach_display": "Reach",
-    })
-    # Ensure Reach column exists — fallback to other names or create placeholder
-    if "Reach" not in df.columns:
-        if "reach_display" in df.columns:
-            df = df.rename(columns={"reach_display": "Reach"})
-            logger.info("Renamed 'reach_display' -> 'Reach'")
-        elif "reach" in df.columns:
-            df = df.rename(columns={"reach": "Reach"})
-            logger.info("Renamed 'reach' -> 'Reach'")
-        else:
-            df["Reach"] = "N/A"
-            logger.info("Added placeholder 'Reach' column with 'N/A' values")
-
-    if "Collab Status" not in df.columns:
-        df["Collab Status"] = "belum collab"
-
-    # Defensive: ensure all expected columns exist before attempting selection
-    expected_columns = [
-        "No", "Bulan", "Tanggal yang post date", "Judul Konten", "Content Type",
-        "Username", "Link IG", "Reach", "Views", "Likes", "Comment", "Share",
-        "Repost", "Save", "Collab Status"
+    
+    # Reorder columns as specified
+    column_order = [
+        "url", "post_date", "caption", "views", "likes", "comments", "shares", "reposts", "saves", "reach", "followers"
     ]
-    for col in expected_columns:
-        if col not in df.columns:
-            df[col] = "" if col in ["No", "Bulan"] else "N/A"
-    logger.info("Result DataFrame columns (final): %s", df.columns.tolist())
-
-    def _extract_month(date_value: str) -> str:
-        if not date_value or date_value == "N/A":
-            return ""
-        try:
-            parsed = pd.to_datetime(date_value, errors="coerce")
-            if pd.isna(parsed):
-                return ""
-            month_name = parsed.strftime("%m")
-            return {
-                "01": "Januari",
-                "02": "Februari",
-                "03": "Maret",
-                "04": "April",
-                "05": "Mei",
-                "06": "Juni",
-                "07": "Juli",
-                "08": "Agustus",
-                "09": "September",
-                "10": "Oktober",
-                "11": "November",
-                "12": "Desember",
-            }.get(month_name, "")
-        except Exception:
-            return ""
-
-    df["Bulan"] = df["Tanggal yang post date"].apply(_extract_month)
-    # Avoid ValueError when 'No' already exists: drop placeholder then insert
-    if "No" in df.columns:
-        df = df.drop(columns=["No"])
-    df.insert(0, "No", range(1, len(df) + 1))
-    df = df[[
-        "No", "Bulan", "Tanggal yang post date", "Judul Konten", "Content Type", "Username", "Link IG",
-        "Reach", "Views", "Likes", "Comment", "Share", "Repost", "Save", "Collab Status"
-    ]]
-
+    available_columns = [col for col in column_order if col in df.columns]
+    df = df[available_columns]
+    
     # Display an informational banner for result types
     if META_ACCESS_TOKEN:
         st.success("✅ Meta API aktif — Likes, Comments, Views, Saves, Shares tersedia!")
@@ -349,46 +280,17 @@ if st.session_state["has_results"] and len(st.session_state["results"]) > 0:
         use_container_width=True,
         height=400,
         column_config={
-            "Link IG": st.column_config.LinkColumn("Link IG", display_text="🔗 Buka"),
-            "Views": st.column_config.NumberColumn("Views", format="%d"),
-            "Likes": st.column_config.NumberColumn("Likes", format="%d"),
-            "Comment": st.column_config.NumberColumn("Comment", format="%d"),
-            "Share": st.column_config.NumberColumn("Share", format="%d"),
-            "Repost": st.column_config.NumberColumn("Repost", format="%d"),
-            "Save": st.column_config.NumberColumn("Save", format="%d"),
-            "Reach": st.column_config.TextColumn("Reach"),
+            "url": st.column_config.LinkColumn("Link IG", display_text="🔗 Buka"),
+            "views": st.column_config.NumberColumn("Views", format="%d"),
+            "likes": st.column_config.NumberColumn("Likes", format="%d"),
+            "comments": st.column_config.NumberColumn("Comment", format="%d"),
+            "shares": st.column_config.NumberColumn("Share", format="%d"),
+            "reposts": st.column_config.NumberColumn("Repost", format="%d"),
+            "saves": st.column_config.NumberColumn("Save", format="%d"),
+            "reach": st.column_config.NumberColumn("Reach", format="%d"),
+            "followers": st.column_config.NumberColumn("Jumlah followers akun cbp.rupiah saat di scrapping", format="%d"),
         }
     )
-
-    if HAS_SPREADSHEET_SERVICE:
-        st.info("Tekan tombol di bawah untuk mengonfirmasi penyalinan hasil scraping ke Google Sheets.")
-        if st.button("✅ Konfirmasi Salin ke Google Sheets", type="primary"):
-            try:
-                service = SpreadsheetService()
-                service.ensure_header()
-                # Ensure rows are appended in oldest->newest order
-                try:
-                    sorted_records = sorted(
-                        st.session_state["results"],
-                        key=lambda r: pd.to_datetime(r.get("post_date"), errors="coerce")
-                    )
-                except Exception:
-                    sorted_records = st.session_state["results"]
-                appended = service.append_rows(sorted_records)
-                st.session_state["appended_count"] = appended
-                if appended > 0:
-                    st.success(f"✅ Berhasil menambahkan {appended} baris ke Google Sheets.")
-                else:
-                    st.info("Tidak ada baris baru untuk ditambahkan ke Google Sheets.")
-            except Exception as e:
-                logger.exception(e)
-                st.warning(
-                    "⚠️ Upload ke Google Sheets gagal. Data tetap ditampilkan, tetapi tidak disimpan ke Sheets. "
-                    "Periksa konfigurasi kredensial atau akses sheet."
-                )
-                st.error(f"Google Sheets error: {str(e)}")
-    else:
-        st.warning("Google Sheets upload tidak tersedia karena SpreadsheetService tidak dapat diinisialisasi.")
 
     st.divider()
     col1, col2 = st.columns(2)

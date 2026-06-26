@@ -5,7 +5,6 @@ Implements Apify-based scraping for /p/ URLs and Instaloader for /reel/ posts.
 
 import re
 import time
-from datetime import datetime, timezone
 from typing import Dict, List, Any
 
 import requests
@@ -24,18 +23,6 @@ except Exception:
     QueryReturnedNotFoundException = Exception
     TwoFactorAuthRequiredException = Exception
     HAS_INSTALOADER = False
-
-try:
-    import playwright
-    HAS_PLAYWRIGHT = True
-except Exception:
-    HAS_PLAYWRIGHT = False
-
-try:
-    import bs4
-    HAS_BS4 = True
-except Exception:
-    HAS_BS4 = False
 
 from config.settings import (
     APIFY_TOKEN,
@@ -79,7 +66,6 @@ class InstagramScraper:
 
         self.instaloader_client = None
         self.cbp_followers_raw = "N/A"
-        self.cbp_followers_cache = {}
         if HAS_INSTALOADER:
             self._init_instaloader()
         else:
@@ -147,63 +133,6 @@ class InstagramScraper:
                 self.logger.info("Loaded CBP account followers from Meta API: %s", self.cbp_followers_raw)
             except Exception as e:
                 self.logger.warning("Failed to load CBP followers via Meta API: %s", e)
-
-    def _parse_datetime_for_insights(self, date_str: str) -> datetime | None:
-        if not date_str or date_str == "N/A":
-            return None
-
-        iso_date = date_str.strip()
-        if iso_date.endswith("Z"):
-            iso_date = iso_date[:-1] + "+00:00"
-        if re.search(r"[+-]\d{4}$", iso_date):
-            iso_date = iso_date[:-5] + iso_date[-5:-2] + ":" + iso_date[-2:]
-
-        try:
-            return datetime.fromisoformat(iso_date)
-        except ValueError:
-            try:
-                return datetime.strptime(iso_date, "%Y-%m-%dT%H:%M:%S")
-            except ValueError:
-                return None
-
-    def _fetch_cbp_followers_by_date(self, date_str: str) -> Any:
-        if not date_str or date_str == "N/A":
-            return self.cbp_followers_raw
-
-        if date_str in self.cbp_followers_cache:
-            return self.cbp_followers_cache[date_str]
-
-        parsed_date = self._parse_datetime_for_insights(date_str)
-        if parsed_date is None:
-            self.cbp_followers_cache[date_str] = self.cbp_followers_raw
-            return self.cbp_followers_raw
-
-        if META_ACCESS_TOKEN and META_INSTAGRAM_ID:
-            try:
-                since = int(parsed_date.replace(tzinfo=timezone.utc).timestamp())
-                until = since + 86400
-                insights_url = f"https://graph.facebook.com/{META_API_VERSION}/{META_INSTAGRAM_ID}/insights"
-                params = {
-                    "metric": "follower_count",
-                    "period": "day",
-                    "since": since,
-                    "until": until,
-                    "access_token": META_ACCESS_TOKEN,
-                }
-                response = requests.get(insights_url, params=params, timeout=30)
-                response.raise_for_status()
-                data = response.json()
-                values = data.get("data", [])[0].get("values", []) if data.get("data") else []
-                if values:
-                    followers_on_date = values[-1].get("value", self.cbp_followers_raw)
-                    self.cbp_followers_cache[date_str] = followers_on_date
-                    return followers_on_date
-                self.logger.info("No follower_count insight found for %s; using current CBP follower count.", date_str)
-            except Exception as e:
-                self.logger.warning("Failed to fetch CBP follower count for %s via Meta Insights: %s", date_str, e)
-
-        self.cbp_followers_cache[date_str] = self.cbp_followers_raw
-        return self.cbp_followers_raw
 
     def scrape(self, urls: List[str]) -> List[Dict[str, Any]]:
         reel_urls = [url for url in urls if "/reel/" in url.lower()]
@@ -461,7 +390,6 @@ class InstagramScraper:
         else:
             content_type = "Post"
 
-        post_date = media_item.get("timestamp", "N/A")
         result = {
             "url": url,
             "content_type": content_type,
@@ -472,9 +400,9 @@ class InstagramScraper:
             "saves_raw": insights.get("saved", "N/A"),
             "shares_raw": insights.get("shares", "N/A"),
             "reposts_raw": "N/A",
-            "followers_raw": self._fetch_cbp_followers_by_date(post_date),
+            "followers_raw": self.cbp_followers_raw,
             "username_raw": media_item.get("username", "N/A"),
-            "post_date_raw": post_date,
+            "post_date_raw": media_item.get("timestamp", "N/A"),
             "caption_raw": media_item.get("caption", "N/A"),
         }
 
@@ -508,9 +436,9 @@ class InstagramScraper:
             record["comments_raw"] = item.get("commentsCount", item.get("comments", "N/A"))
             record["views_raw"] = item.get("videoViewCount", "N/A")
             record["reach_raw"] = item.get("reach", "N/A")
-            record["post_date_raw"] = item.get("timestamp", item.get("createdAt", "N/A"))
-            record["followers_raw"] = self._fetch_cbp_followers_by_date(record["post_date_raw"])
+            record["followers_raw"] = self.cbp_followers_raw
             record["username_raw"] = item.get("username", item.get("ownerUsername", "N/A"))
+            record["post_date_raw"] = item.get("timestamp", item.get("createdAt", "N/A"))
             record["caption_raw"] = item.get("caption", item.get("description", "")) or ""
 
             item_type = item.get("type", "") or item.get("mediaType", "") or item.get("productType", "")
@@ -569,14 +497,14 @@ class InstagramScraper:
             record["comments_raw"] = post.comments
             record["views_raw"] = getattr(post, "video_view_count", "N/A") if getattr(post, "is_video", False) else "N/A"
             record["reach_raw"] = "N/A"
+            record["followers_raw"] = self.cbp_followers_raw
+            owner_profile = getattr(post, "owner_profile", None)
+            record["username_raw"] = getattr(owner_profile, "username", "N/A") if owner_profile is not None else "N/A"
             record["post_date_raw"] = (
                 post.date_utc.strftime("%Y-%m-%dT%H:%M:%S")
                 if getattr(post, "date_utc", None) is not None
                 else "N/A"
             )
-            record["followers_raw"] = self._fetch_cbp_followers_by_date(record["post_date_raw"])
-            owner_profile = getattr(post, "owner_profile", None)
-            record["username_raw"] = getattr(owner_profile, "username", "N/A") if owner_profile is not None else "N/A"
             record["caption_raw"] = post.caption if post.caption is not None else ""
 
             if getattr(post, "is_video", False):

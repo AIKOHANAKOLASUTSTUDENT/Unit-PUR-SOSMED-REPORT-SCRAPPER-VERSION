@@ -8,7 +8,6 @@ from datetime import datetime
 import pytz
 from typing import Union, Optional
 
-from config.settings import INSTAGRAM_USERNAME
 # dateutil for robust ISO timestamp parsing
 from dateutil import parser as dateutil_parser
 
@@ -179,37 +178,23 @@ def normalize_caption(text: Optional[str], max_length: int = 100) -> str:
     return best
 
 
-def normalize_collab_status(text: Optional[str], author_username: str = "") -> str:
+def normalize_collab_status(text: Optional[str]) -> str:
     """
-    Determine collab status relative to the CBP account.
-
-    Rules:
-    - If the uploader is the CBP account, return "konten akun cbp"
-    - If the caption mentions the CBP account, return "sudah collab"
-    - Otherwise, return "belum collab"
+    Determine if content is collab based on caption text.
     """
-    cbp_handle = INSTAGRAM_USERNAME.strip().lower() or "cbp.rupiah_qris_peka_bi_sulut"
-    author_username_clean = (author_username or "").strip().lower()
-
-    if author_username_clean and author_username_clean == cbp_handle:
-        return "konten akun cbp"
-
     if not text:
-        return "belum collab"
+        return "No"
 
-    lower_text = text.lower()
-    mention_variants = [
-        cbp_handle,
-        f"@{cbp_handle}",
-        "cbp rupiah qris",
-        "cbp.rupiah",
-        "cbprupiah",
+    collab_markers = [
+        "kolab", "kolaborasi", "collab", "collaboration", "x cbp", "x cbprupiah",
+        "x cbprupiah", "x cbp.rupiah", "x cbp", "@", "with",
     ]
 
-    if any(variant in lower_text for variant in mention_variants):
-        return "sudah collab"
+    lower_text = text.lower()
+    if any(marker in lower_text for marker in collab_markers):
+        return "Yes"
 
-    return "belum collab"
+    return "No"
 
 
 def normalize_url(url: str) -> str:

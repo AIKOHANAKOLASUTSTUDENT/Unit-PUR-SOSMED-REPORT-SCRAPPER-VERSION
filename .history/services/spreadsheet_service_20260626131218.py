@@ -230,7 +230,7 @@ class SpreadsheetService:
                 record.get("content_type", ""),
                 record.get("username", ""),
                 record.get("url", ""),
-                record.get("reach_display", record.get("reach", "")),
+                record.get("reach", ""),
                 record.get("views", ""),
                 record.get("likes", ""),
                 record.get("comments", ""),

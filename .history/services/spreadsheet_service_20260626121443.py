@@ -132,7 +132,8 @@ class SpreadsheetService:
         
         headers = [
             "No", "Bulan", "Tanggal yang post date", "Judul Konten", "Content Type", "Username", "Link IG",
-            "Reach", "Views", "Likes", "Comment", "Share", "Repost", "Save", "Collab Status"
+            "Reach", "Views", "Likes", "Comment", "Share", "Repost", "Save", "Collab Status",
+            "Jumlah followers akun cbp.rupiah saat di scrapping"
         ]
         
         if not first_row or first_row != headers:
@@ -230,7 +231,7 @@ class SpreadsheetService:
                 record.get("content_type", ""),
                 record.get("username", ""),
                 record.get("url", ""),
-                record.get("reach_display", record.get("reach", "")),
+                record.get("reach", ""),
                 record.get("views", ""),
                 record.get("likes", ""),
                 record.get("comments", ""),
@@ -238,6 +239,7 @@ class SpreadsheetService:
                 record.get("reposts", ""),
                 record.get("saves", ""),
                 record.get("collab_status", "belum collab"),
+                record.get("followers", ""),
             ]
             rows_to_append.append(row)
             existing_urls.add(url)  # Mark as seen

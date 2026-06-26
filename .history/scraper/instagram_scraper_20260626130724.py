@@ -25,18 +25,6 @@ except Exception:
     TwoFactorAuthRequiredException = Exception
     HAS_INSTALOADER = False
 
-try:
-    import playwright
-    HAS_PLAYWRIGHT = True
-except Exception:
-    HAS_PLAYWRIGHT = False
-
-try:
-    import bs4
-    HAS_BS4 = True
-except Exception:
-    HAS_BS4 = False
-
 from config.settings import (
     APIFY_TOKEN,
     INSTAGRAM_USERNAME,
@@ -461,7 +449,6 @@ class InstagramScraper:
         else:
             content_type = "Post"
 
-        post_date = media_item.get("timestamp", "N/A")
         result = {
             "url": url,
             "content_type": content_type,
@@ -472,9 +459,9 @@ class InstagramScraper:
             "saves_raw": insights.get("saved", "N/A"),
             "shares_raw": insights.get("shares", "N/A"),
             "reposts_raw": "N/A",
-            "followers_raw": self._fetch_cbp_followers_by_date(post_date),
+            "followers_raw": self.cbp_followers_raw,
             "username_raw": media_item.get("username", "N/A"),
-            "post_date_raw": post_date,
+            "post_date_raw": media_item.get("timestamp", "N/A"),
             "caption_raw": media_item.get("caption", "N/A"),
         }
 

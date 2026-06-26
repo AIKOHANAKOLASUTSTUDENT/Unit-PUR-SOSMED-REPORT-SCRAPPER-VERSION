@@ -8,7 +8,6 @@ from datetime import datetime
 import pytz
 from typing import Union, Optional
 
-from config.settings import INSTAGRAM_USERNAME
 # dateutil for robust ISO timestamp parsing
 from dateutil import parser as dateutil_parser
 
@@ -177,39 +176,6 @@ def normalize_caption(text: Optional[str], max_length: int = 100) -> str:
         best = best[:max_length].rstrip() + "..."
 
     return best
-
-
-def normalize_collab_status(text: Optional[str], author_username: str = "") -> str:
-    """
-    Determine collab status relative to the CBP account.
-
-    Rules:
-    - If the uploader is the CBP account, return "konten akun cbp"
-    - If the caption mentions the CBP account, return "sudah collab"
-    - Otherwise, return "belum collab"
-    """
-    cbp_handle = INSTAGRAM_USERNAME.strip().lower() or "cbp.rupiah_qris_peka_bi_sulut"
-    author_username_clean = (author_username or "").strip().lower()
-
-    if author_username_clean and author_username_clean == cbp_handle:
-        return "konten akun cbp"
-
-    if not text:
-        return "belum collab"
-
-    lower_text = text.lower()
-    mention_variants = [
-        cbp_handle,
-        f"@{cbp_handle}",
-        "cbp rupiah qris",
-        "cbp.rupiah",
-        "cbprupiah",
-    ]
-
-    if any(variant in lower_text for variant in mention_variants):
-        return "sudah collab"
-
-    return "belum collab"
 
 
 def normalize_url(url: str) -> str:

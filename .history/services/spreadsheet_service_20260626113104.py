@@ -44,15 +44,11 @@ class SpreadsheetService:
         credentials = self._get_credentials()
         
         # Authorize and open spreadsheet
-        try:
-            self.client = gspread.authorize(credentials)
-            self.spreadsheet = self.client.open_by_key(self.sheet_id)
-            self.worksheet = None
-            self.logger.info(f"SpreadsheetService initialized for sheet: {self.sheet_id}")
-        except Exception as e:
-            error_message = f"Failed to open Google Sheet '{self.sheet_id}': {e}"
-            self.logger.error(error_message)
-            raise RuntimeError(error_message) from e
+        self.client = gspread.authorize(credentials)
+        self.spreadsheet = self.client.open_by_key(self.sheet_id)
+        self.worksheet = None
+        
+        self.logger.info(f"SpreadsheetService initialized for sheet: {self.sheet_id}")
     
     def _normalize_sheet_id(self, raw_id: str) -> str:
         """
@@ -132,7 +128,8 @@ class SpreadsheetService:
         
         headers = [
             "No", "Bulan", "Tanggal yang post date", "Judul Konten", "Content Type", "Username", "Link IG",
-            "Reach", "Views", "Likes", "Comment", "Share", "Repost", "Save", "Collab Status"
+            "Reach", "Views", "Likes", "Comment", "Share", "Repost", "Save",
+            "Jumlah followers akun cbp.rupiah saat di scrapping"
         ]
         
         if not first_row or first_row != headers:
@@ -230,14 +227,14 @@ class SpreadsheetService:
                 record.get("content_type", ""),
                 record.get("username", ""),
                 record.get("url", ""),
-                record.get("reach_display", record.get("reach", "")),
+                record.get("reach", ""),
                 record.get("views", ""),
                 record.get("likes", ""),
                 record.get("comments", ""),
                 record.get("shares", ""),
                 record.get("reposts", ""),
                 record.get("saves", ""),
-                record.get("collab_status", "belum collab"),
+                record.get("followers", ""),
             ]
             rows_to_append.append(row)
             existing_urls.add(url)  # Mark as seen
